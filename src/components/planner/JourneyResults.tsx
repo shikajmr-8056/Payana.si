@@ -79,26 +79,28 @@ export function JourneyResults({
         </div>
 
         {/* Skeleton cards */}
-        {[1, 2, 3].map((n) => (
-          <div
-            key={n}
-            className="p-5 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 space-y-3 animate-pulse"
-          >
-            <div className="flex items-center justify-between">
-              <div className="w-24 h-5 bg-slate-200 dark:bg-slate-800 rounded-lg" />
-              <div className="w-16 h-5 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map((n) => (
+            <div
+              key={n}
+              className="p-5 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 space-y-3 animate-pulse"
+            >
+              <div className="flex items-center justify-between">
+                <div className="w-24 h-5 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                <div className="w-16 h-5 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <div className="w-48 h-7 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+                <div className="w-14 h-7 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+              </div>
+              <div className="flex items-center gap-2 pt-2">
+                <div className="w-20 h-6 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                <div className="w-28 h-6 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+                <div className="w-20 h-6 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+              </div>
             </div>
-            <div className="flex items-center justify-between pt-1">
-              <div className="w-48 h-7 bg-slate-200 dark:bg-slate-800 rounded-xl" />
-              <div className="w-14 h-7 bg-slate-200 dark:bg-slate-800 rounded-xl" />
-            </div>
-            <div className="flex items-center gap-2 pt-2">
-              <div className="w-20 h-6 bg-slate-200 dark:bg-slate-800 rounded-lg" />
-              <div className="w-28 h-6 bg-slate-200 dark:bg-slate-800 rounded-lg" />
-              <div className="w-20 h-6 bg-slate-200 dark:bg-slate-800 rounded-lg" />
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     );
   }
@@ -164,26 +166,30 @@ export function JourneyResults({
       {/* Results Header */}
       <div className="flex flex-wrap items-center justify-between gap-2 px-1">
         <div>
-          <span className="text-xs font-black uppercase tracking-wider text-slate-400 block">
-            Recommended Multimodal Routes
-          </span>
-          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-            {results.length} journey options for {from} ➔ {to}
+          <div className="flex items-center gap-1.5">
+            <Sparkles size={14} className="text-indigo shrink-0" />
+            <span className="text-xs font-black uppercase tracking-wider text-indigo dark:text-indigo-400">
+              AI Recommended Multimodal Routes
+            </span>
+          </div>
+          <p className="text-xs font-bold text-slate-700 dark:text-slate-200 mt-0.5">
+            {results.length} smart route options for {from} ➔ {to}
           </p>
         </div>
 
-        <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
-          <span>Ranked by your travel preferences</span>
+        <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+          <Sparkles size={12} className="text-amber-500 shrink-0" />
+          <span>Ranked by AI Multimodal Engine</span>
         </div>
       </div>
 
-      {/* Cards List */}
-      <div className="space-y-3">
-        {results.map((rec, idx) => (
+      {/* Cards Grid: 2 columns under search bar */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+        {results.map((rec) => (
           <JourneyRecommendationCard
             key={rec.id}
             recommendation={rec}
-            isInitiallyExpanded={idx === 0}
+            isInitiallyExpanded={false}
           />
         ))}
       </div>
