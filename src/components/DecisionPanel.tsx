@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import {
   Clock,
   Bus,
@@ -54,15 +55,13 @@ function CrowdBadge({ level }: { level: string }) {
 function OccupancyBar({ value }: { value: number }) {
   const color = value < 40 ? "#00FF9D" : value < 70 ? "#FACC15" : "#FF007A";
   return (
-    <div className="occupancy-bar w-full">
+    <div className="occupancy-bar w-full overflow-hidden">
       <div 
-        className="occupancy-fill" 
-        ref={(el) => {
-          if (el) {
-            el.style.width = `${value}%`;
-            el.style.background = color;
-          }
-        }} 
+        className="occupancy-fill transition-all duration-700 ease-out" 
+        style={{
+          width: `${value}%`,
+          backgroundColor: color,
+        }}
       />
     </div>
   );
@@ -194,10 +193,82 @@ function TransitCard({
 }
 
 export function DecisionPanel() {
-  const [buses] = useState(initialBuses);
+  const [buses, setBuses] = useState(initialBuses);
   const [trains] = useState(initialMetroTrains);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [transitMode, setTransitMode] = useState<"all" | "bus" | "metro">("all");
+
+  useEffect(() => {
+    // 1. BroadcastChannel listener
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel("payana_transit_tickets");
+      channel.onmessage = (event) => {
+        handleTicketEvent(event.data);
+      };
+    } catch (e) {
+      console.warn("BroadcastChannel not supported", e);
+    }
+
+    // 2. Cross-tab LocalStorage listener
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "payana_ticket_sync_event" && event.newValue) {
+        try {
+          const data = JSON.parse(event.newValue);
+          handleTicketEvent(data);
+        } catch (e) {}
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
+    // 3. Window postMessage listener
+    const handlePostMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === "TICKET_PURCHASED") {
+        handleTicketEvent(event.data);
+      }
+    };
+    window.addEventListener("message", handlePostMessage);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function handleTicketEvent(data: any) {
+      if (!data || !data.route) return;
+      const targetRoute = String(data.route).toUpperCase().replace(/\s+/g, "");
+      const passengers = Number(data.passengerCount) || 1;
+
+      setBuses((prevBuses) =>
+        prevBuses.map((bus) => {
+          const busRouteNorm = bus.route.toUpperCase().replace(/\s+/g, "");
+          if (
+            busRouteNorm === targetRoute ||
+            targetRoute.includes(busRouteNorm) ||
+            busRouteNorm.includes(targetRoute)
+          ) {
+            const addedOccupancy = Math.round((passengers / 48) * 100);
+            const newOccupancy = Math.min(100, bus.occupancy + addedOccupancy);
+            const newCrowd: "low" | "moderate" | "crowded" | "full" =
+              newOccupancy > 85 ? "full" : newOccupancy > 65 ? "crowded" : newOccupancy > 40 ? "moderate" : "low";
+
+            toast.success(
+              `🎟️ BMTC Ticket Booked: +${passengers} passenger(s) on Route ${bus.route}! Occupancy: ${newOccupancy}%`
+            );
+
+            return {
+              ...bus,
+              occupancy: newOccupancy,
+              crowdLevel: newCrowd,
+            };
+          }
+          return bus;
+        })
+      );
+    }
+
+    return () => {
+      channel?.close();
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("message", handlePostMessage);
+    };
+  }, []);
 
   const transitItems = [
     ...buses.map((b) => ({ ...b, type: "bus" as const })),

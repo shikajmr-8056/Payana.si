@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect, useRef, useMemo } from "react";
+import { toast } from "sonner";
 import {
   Bus,
   Train,
@@ -138,7 +139,94 @@ export function BmtcLiveTransitPanel({
   const [routeStops, setRouteStops] = useState<BusStopItem[]>([]);
   const [activeStop, setActiveStop] = useState<BusStopItem | null>(selectedStop);
   const [upcomingBuses, setUpcomingBuses] = useState<UpcomingBusArrival[]>([]);
+  const [routeSeatsAvailable, setRouteSeatsAvailable] = useState<number>(18);
   const [showSubwayDiagram, setShowSubwayDiagram] = useState(false);
+
+  // Ticket Booking Real-time Sync (from BMTC Ticket Booking App bookaticket)
+  useEffect(() => {
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel("payana_transit_tickets");
+      channel.onmessage = (event) => {
+        handleTicketEvent(event.data);
+      };
+    } catch (e) {
+      console.warn("BroadcastChannel not supported", e);
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "payana_ticket_sync_event" && event.newValue) {
+        try {
+          const data = JSON.parse(event.newValue);
+          handleTicketEvent(data);
+        } catch (e) {}
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
+    const handlePostMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === "TICKET_PURCHASED") {
+        handleTicketEvent(event.data);
+      }
+    };
+    window.addEventListener("message", handlePostMessage);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function handleTicketEvent(data: any) {
+      if (!data) return;
+      const targetRoute = String(data.route || "").toUpperCase().replace(/\s+/g, "");
+      const passengers = Number(data.passengerCount) || 1;
+
+      // Decrement seatCount and update status for upcoming arrivals
+      setUpcomingBuses((prev) =>
+        prev.map((bus) => {
+          const busNorm = bus.routeNo.toUpperCase().replace(/\s+/g, "");
+          if (
+            !targetRoute ||
+            busNorm === targetRoute ||
+            targetRoute.includes(busNorm) ||
+            busNorm.includes(targetRoute)
+          ) {
+            const newCount = Math.max(0, bus.seatCount - passengers);
+            const newStatus: "Seats Free" | "Few Seats" | "Standing Only" =
+              newCount <= 0 ? "Standing Only" : newCount <= 6 ? "Few Seats" : "Seats Free";
+            const newCrowd: "Low" | "Medium" | "High" =
+              newCount <= 0 ? "High" : newCount <= 12 ? "Medium" : "Low";
+            return {
+              ...bus,
+              seatCount: newCount,
+              seatStatus: newStatus,
+              crowdLevel: newCrowd,
+            };
+          }
+          return bus;
+        })
+      );
+
+      // Decrement active route seat forecast
+      const currentNorm = (currentRouteNo || "").toUpperCase().replace(/\s+/g, "");
+      if (
+        !targetRoute ||
+        currentNorm === targetRoute ||
+        targetRoute.includes(currentNorm) ||
+        currentNorm.includes(targetRoute)
+      ) {
+        setRouteSeatsAvailable((prev) => {
+          const updated = Math.max(0, prev - passengers);
+          toast.success(
+            `🎟️ BMTC Ticket Booked: +${passengers} passenger(s) on Route ${data.route || currentRouteNo}! Remaining seats: ${updated}`
+          );
+          return updated;
+        });
+      }
+    }
+
+    return () => {
+      channel?.close();
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("message", handlePostMessage);
+    };
+  }, [currentRouteNo]);
 
   // User's customized travel path on this route (Starting stop -> Ending stop)
   const [travelFromStopId, setTravelFromStopId] = useState<string>("");
@@ -1596,10 +1684,26 @@ export function BmtcLiveTransitPanel({
                     </span>
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-bold text-slate-800 dark:text-slate-200">
-                        High (82% chance of seat)
+                        {routeSeatsAvailable <= 0
+                          ? "Low (0% chance of seat)"
+                          : routeSeatsAvailable <= 6
+                          ? "Moderate (35% chance of seat)"
+                          : "High (82% chance of seat)"}
                       </span>
-                      <span className="text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-md">
-                        🟢 Seats Free
+                      <span
+                        className={`font-bold px-2 py-0.5 rounded-md ${
+                          routeSeatsAvailable <= 0
+                            ? "text-rose-600 bg-rose-50 dark:bg-rose-950"
+                            : routeSeatsAvailable <= 6
+                            ? "text-amber-600 bg-amber-50 dark:bg-amber-950"
+                            : "text-emerald-600 bg-emerald-50 dark:bg-emerald-950"
+                        }`}
+                      >
+                        {routeSeatsAvailable <= 0
+                          ? "🔴 Rush (Standing Only)"
+                          : routeSeatsAvailable <= 6
+                          ? "🟡 Few Seats Left"
+                          : `🟢 Seats Free (${routeSeatsAvailable})`}
                       </span>
                     </div>
                     <p className="text-[10px] text-slate-500">

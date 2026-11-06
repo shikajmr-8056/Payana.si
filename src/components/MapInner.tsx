@@ -446,6 +446,54 @@ export default function MapInner({
     return allStops.filter((_, idx) => idx % 8 === 0);
   }, [isSearchActive, nearbyStops, allStops]);
 
+  // Real-time route rush / occupancy sync from ticket booking events (bookaticket app)
+  const [rushRoutes, setRushRoutes] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel("payana_transit_tickets");
+      channel.onmessage = (event) => {
+        handleTicketEvent(event.data);
+      };
+    } catch (e) {
+      console.warn("BroadcastChannel not supported", e);
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "payana_ticket_sync_event" && event.newValue) {
+        try {
+          const data = JSON.parse(event.newValue);
+          handleTicketEvent(data);
+        } catch (e) {}
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
+    const handlePostMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === "TICKET_PURCHASED") {
+        handleTicketEvent(event.data);
+      }
+    };
+    window.addEventListener("message", handlePostMessage);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function handleTicketEvent(data: any) {
+      if (!data || !data.route) return;
+      const targetRoute = String(data.route).toUpperCase().replace(/\s+/g, "");
+      setRushRoutes((prev) => ({
+        ...prev,
+        [targetRoute]: true,
+      }));
+    }
+
+    return () => {
+      channel?.close();
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("message", handlePostMessage);
+    };
+  }, []);
+
   // Multiple authentic live vehicles (buses or metro trains) along active route corridor
   const isMetroActive = isMetroRoute(busNumber || activeRouteName);
   const metroActiveColor = activeRouteName.toLowerCase().includes("green")
@@ -457,6 +505,14 @@ export default function MapInner({
   const liveVehicles = useMemo(() => {
     if (activeRouteCoords.length < 10) return [];
 
+    const currentRouteNorm = (busNumber || activeRouteName || "").toUpperCase().replace(/\s+/g, "");
+    const isCurrentRouteRush = Boolean(
+      rushRoutes[currentRouteNorm] ||
+      Object.keys(rushRoutes).some(
+        (r) => currentRouteNorm.includes(r) || r.includes(currentRouteNorm)
+      )
+    );
+
     if (isMetroActive) {
       const isPurple = activeRouteName.toLowerCase().includes("purple");
       const isGreen = activeRouteName.toLowerCase().includes("green");
@@ -467,7 +523,7 @@ export default function MapInner({
       return fractions.map((frac, idx) => {
         const ptIndex = Math.min(Math.floor(activeRouteCoords.length * frac), activeRouteCoords.length - 1);
         const trainId = `${prefix}-0${idx * 3 + 2}`;
-        const seat = seats[idx % seats.length];
+        const seat = isCurrentRouteRush ? "Rush" : seats[idx % seats.length];
         return {
           id: `live-metro-${idx}`,
           position: activeRouteCoords[ptIndex],
@@ -483,12 +539,12 @@ export default function MapInner({
 
     const fractions = [0.16, 0.38, 0.65, 0.86];
     const plates = ["KA51AJ9862", "KA57F4572", "KA01F8821", "KA53F3841"];
-    // Alternate between green (empty seats) and red (rush, no empty seats)
+    // Alternate between green (empty seats) and red (rush, no empty seats), or override to Rush if ticket booked
     const seats = ["Seats Free", "Rush", "Seats Free", "Rush"];
 
     return fractions.map((frac, idx) => {
       const ptIndex = Math.min(Math.floor(activeRouteCoords.length * frac), activeRouteCoords.length - 1);
-      const seat = seats[idx % seats.length];
+      const seat = isCurrentRouteRush ? "Rush" : seats[idx % seats.length];
       return {
         id: `live-bus-${idx}`,
         position: activeRouteCoords[ptIndex],
@@ -500,7 +556,7 @@ export default function MapInner({
         color: "#4F46E5",
       };
     });
-  }, [activeRouteCoords, busNumber, activeRouteName, isMetroActive, metroActiveColor]);
+  }, [activeRouteCoords, busNumber, activeRouteName, isMetroActive, metroActiveColor, rushRoutes]);
 
   // Determine if there is a specific intended segment between origin (from / userLocation) and destination (to)
   const intendedSegment = useMemo(() => {

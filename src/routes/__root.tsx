@@ -9,6 +9,7 @@ import {
 import { useEffect } from "react";
 import { Navbar } from "../components/Navbar";
 import { MobileBottomNav } from "../components/MobileBottomNav";
+import { Toaster } from "../components/ui/sonner";
 
 import appCss from "../styles.css?url";
 
@@ -93,6 +94,7 @@ function RootComponent() {
 
   return (
     <>
+      <Toaster position="top-right" richColors />
       {!isSignIn && <Navbar />}
       <Outlet />
       {!isSignIn && <MobileBottomNav />}
