@@ -52,8 +52,6 @@ import {
 
 // Multimodal Components & Engine
 import { JourneySearchForm } from "../components/planner/JourneySearchForm";
-import { TransportModeSelector } from "../components/planner/TransportModeSelector";
-import { JourneyPreferenceSelector } from "../components/planner/JourneyPreferenceSelector";
 import { JourneyResults } from "../components/planner/JourneyResults";
 import { planMultimodalJourney } from "../lib/multimodalPlannerEngine";
 import type {
@@ -559,25 +557,6 @@ function PlanPage() {
               onSubmit={() => handleRunMultimodalPlan()}
               isSearching={isPlanning}
             />
-
-            {/* Divider */}
-            <div className="border-t border-slate-100 dark:border-slate-800/80 pt-4 space-y-6">
-              {/* 2. Transport Mode Selector (BMTC Only / Metro Only / BMTC + Metro) */}
-              <TransportModeSelector
-                selectedMode={transportMode}
-                onChange={handleTransportModeChange}
-              />
-
-              {/* 3. Personalized Travel Priorities & Seating Control */}
-              <JourneyPreferenceSelector
-                primaryPriority={primaryPriority}
-                secondaryPriorities={secondaryPriorities}
-                seatingPreference={seatingPreference}
-                onPrimaryChange={handlePrimaryChange}
-                onToggleSecondary={handleToggleSecondary}
-                onSeatingChange={handleSeatingChange}
-              />
-            </div>
           </div>
 
           {/* 4. Journey Results (All states: Initial, Loading, Results, No route found, Error) */}
