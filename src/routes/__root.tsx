@@ -5,10 +5,10 @@ import {
   HeadContent,
   Scripts,
   useLocation,
-  useRouter,
 } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { Navbar } from "../components/Navbar";
+import { MobileBottomNav } from "../components/MobileBottomNav";
 
 import appCss from "../styles.css?url";
 
@@ -38,17 +38,17 @@ export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "payana.ai — AI-Powered Transit for Bengaluru" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+      { title: "payana.ai — Move Smarter Through Bengaluru" },
       {
         name: "description",
         content:
-          "Real-time BMTC bus tracking, crowd insights, and smart route decisions for Bengaluru commuters.",
+          "Real-time BMTC bus tracking, Namma Metro transit maps, and intelligent route decisions for Bengaluru commuters.",
       },
-      { property: "og:title", content: "payana.ai — AI-Powered Transit" },
+      { property: "og:title", content: "payana.ai — Intelligent Bengaluru Transit" },
       {
         property: "og:description",
-        content: "Real-time BMTC bus tracking and smart route decisions for Bengaluru.",
+        content: "Move smarter through Bengaluru with multi-modal BMTC and Metro transit optimization.",
       },
       { property: "og:type", content: "website" },
     ],
@@ -58,7 +58,7 @@ export const Route = createRootRoute({
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" as const },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap",
       },
     ],
   }),
@@ -79,20 +79,23 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const location = useLocation();
-  const router = useRouter();
   const isSignIn = location.pathname === "/signin";
 
   useEffect(() => {
-    const isAuth = localStorage.getItem("payana_auth") === "true";
-    if (!isAuth && !isSignIn) {
-      router.navigate({ to: "/signin", replace: true });
+    // Initialize active user state so visitors can access the app immediately
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("payana_auth");
+      if (stored === null) {
+        localStorage.setItem("payana_auth", "true");
+      }
     }
-  }, [isSignIn, router]);
+  }, []);
 
   return (
     <>
       {!isSignIn && <Navbar />}
       <Outlet />
+      {!isSignIn && <MobileBottomNav />}
     </>
   );
 }

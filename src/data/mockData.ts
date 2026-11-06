@@ -536,15 +536,7 @@ export const peakData = {
 };
 
 export function moveBus(bus: Bus): Bus {
-  const jitterLat = (Math.random() - 0.5) * 0.002;
-  const jitterLng = (Math.random() - 0.5) * 0.002;
-  const newEta = Math.max(0, bus.eta - (Math.random() > 0.7 ? 1 : 0));
-  return {
-    ...bus,
-    lat: bus.lat + jitterLat,
-    lng: bus.lng + jitterLng,
-    eta: newEta === 0 ? Math.floor(Math.random() * 12) + 3 : newEta,
-  };
+  return bus;
 }
 
 export interface MetroStation {
@@ -571,81 +563,13 @@ export interface MetroTrain {
   status: "Arriving" | "Departed" | "On Time";
 }
 
-export const metroStations: MetroStation[] = [
-  { id: "ms1", name: "Mysore Road", lat: 12.9515, lng: 77.5303, line: "purple" },
-  { id: "ms2", name: "Magadi Road", lat: 12.9754, lng: 77.5552, line: "purple" },
-  { id: "ms3", name: "Majestic", lat: 12.9758, lng: 77.5708, line: "purple" },
-  { id: "ms4", name: "MG Road", lat: 12.9734, lng: 77.608, line: "purple" },
-  { id: "ms5", name: "Indiranagar", lat: 12.9785, lng: 77.6385, line: "purple" },
-  { id: "ms6", name: "Baiyappanahalli", lat: 12.9904, lng: 77.6525, line: "purple" },
-  { id: "ms7", name: "Yeshwanthpur", lat: 13.0232, lng: 77.5504, line: "green" },
-  { id: "ms8", name: "Majestic (Green)", lat: 12.9758, lng: 77.5708, line: "green" },
-  { id: "ms9", name: "Jayanagar", lat: 12.9298, lng: 77.5802, line: "green" },
-  { id: "ms10", name: "Silk Institute", lat: 12.8687, lng: 77.535, line: "green" },
-];
+export const metroStations: MetroStation[] = [];
 
-export const metroLines: MetroLine[] = [
-  {
-    id: "ml1",
-    name: "Purple Line",
-    color: "#8B5CF6",
-    path: [
-      [12.9515, 77.5303],
-      [12.9754, 77.5552],
-      [12.9758, 77.5708],
-      [12.9734, 77.608],
-      [12.9785, 77.6385],
-      [12.9904, 77.6525],
-    ],
-  },
-  {
-    id: "ml2",
-    name: "Green Line",
-    color: "#10B981",
-    path: [
-      [13.0232, 77.5504],
-      [12.9758, 77.5708],
-      [12.9298, 77.5802],
-      [12.8687, 77.535],
-    ],
-  },
-];
+export const metroLines: MetroLine[] = [];
 
-export const initialMetroTrains: MetroTrain[] = [
-  {
-    id: "mt1",
-    line: "purple",
-    lat: 12.965,
-    lng: 77.545,
-    nextStation: "Magadi Road",
-    status: "On Time",
-  },
-  {
-    id: "mt2",
-    line: "purple",
-    lat: 12.974,
-    lng: 77.59,
-    nextStation: "MG Road",
-    status: "Arriving",
-  },
-  { id: "mt3", line: "green", lat: 13.0, lng: 77.56, nextStation: "Majestic", status: "On Time" },
-  {
-    id: "mt4",
-    line: "green",
-    lat: 12.95,
-    lng: 77.575,
-    nextStation: "Jayanagar",
-    status: "Departed",
-  },
-];
+export const initialMetroTrains: MetroTrain[] = [];
 
 export function moveMetroTrain(train: MetroTrain): MetroTrain {
-  const jitterLat = (Math.random() - 0.5) * 0.0015;
-  const jitterLng = (Math.random() - 0.5) * 0.0015;
-  return {
-    ...train,
-    lat: train.lat + jitterLat,
-    lng: train.lng + jitterLng,
-  };
+  return train;
 }
 // Payana.ai

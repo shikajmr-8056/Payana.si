@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Clock,
@@ -12,11 +12,9 @@ import {
 } from "lucide-react";
 import {
   initialBuses,
-  moveBus,
   transferRoutes,
   type Bus as BusType,
   initialMetroTrains,
-  moveMetroTrain,
   type MetroTrain,
 } from "../data/mockData";
 
@@ -31,7 +29,7 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
       2;
   return R * 2 * Math.asin(Math.sqrt(a));
 }
-const MY_LOCATION = { lat: 13.0366, lng: 77.6321 }; // HKBK College of Engineering
+const MY_LOCATION = { lat: 12.9716, lng: 77.5946 }; // Central Bengaluru
 
 function CrowdBadge({ level }: { level: string }) {
   const styles: Record<string, string> = {
@@ -196,20 +194,10 @@ function TransitCard({
 }
 
 export function DecisionPanel() {
-  const [buses, setBuses] = useState(initialBuses);
-  const [trains, setTrains] = useState(initialMetroTrains);
+  const [buses] = useState(initialBuses);
+  const [trains] = useState(initialMetroTrains);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [transitMode, setTransitMode] = useState<"all" | "bus" | "metro">("all");
-
-  const tick = useCallback(() => {
-    setBuses((prev) => prev.map(moveBus));
-    setTrains((prev) => prev.map(moveMetroTrain));
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(tick, 2000);
-    return () => clearInterval(interval);
-  }, [tick]);
 
   const transitItems = [
     ...buses.map((b) => ({ ...b, type: "bus" as const })),
