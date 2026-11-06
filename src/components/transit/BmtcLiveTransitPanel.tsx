@@ -21,6 +21,9 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Map,
   ArrowRightLeft,
   ArrowUpDown,
   Layers,
@@ -718,16 +721,25 @@ export function BmtcLiveTransitPanel({
   return (
     <div
       className={`bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xl flex flex-col transition-all duration-300 pointer-events-auto ${
-        isCollapsed || !hasActiveRoute
-          ? "h-auto overflow-visible"
-          : "h-[calc(100vh-6.5rem)] max-h-[820px] overflow-hidden"
+        isCollapsed
+          ? "h-auto overflow-hidden shadow-lg"
+          : !hasActiveRoute
+          ? "h-auto max-h-[85vh] sm:max-h-[780px] overflow-hidden"
+          : "max-h-[72vh] sm:max-h-[820px] h-auto overflow-hidden"
       } ${className}`}
     >
+      {/* Mobile top pull handle indicator */}
+      <div 
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        className="w-10 h-1 bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 rounded-full mx-auto mt-2 -mb-0.5 sm:hidden cursor-pointer transition-colors" 
+        title={isCollapsed ? "Tap to open route details" : "Tap to minimize to map"}
+      />
+
       {/* ========================================================
           1. TOP NAVIGATION TABS (BMTC Bus, Namma Metro & Decision Engine)
          ======================================================== */}
       <div className="p-2.5 pb-2 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 gap-2">
-        <div className="flex items-center gap-1.5 w-full">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
           {/* Tab 1: BMTC Bus */}
           <button
             type="button"
@@ -735,15 +747,16 @@ export function BmtcLiveTransitPanel({
               setActiveTab("transit");
               setTransitMode("bmtc");
               onTransitModeChange?.("bmtc");
+              if (isCollapsed) setIsCollapsed(false);
             }}
-            className={`flex-1 py-1.5 sm:py-2 px-2.5 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 py-1.5 sm:py-2 px-2 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer truncate ${
               activeTab === "transit" && transitMode === "bmtc"
                 ? "bg-[#4F46E5] text-white shadow-md shadow-indigo/25"
                 : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
             }`}
           >
-            <Bus size={14} />
-            <span>BMTC</span>
+            <Bus size={13} className="shrink-0" />
+            <span className="truncate">BMTC</span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
           </button>
 
@@ -757,44 +770,124 @@ export function BmtcLiveTransitPanel({
               if (!hasActiveRoute) {
                 setSearchMode("route");
               }
+              if (isCollapsed) setIsCollapsed(false);
             }}
-            className={`flex-1 py-1.5 sm:py-2 px-2.5 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 py-1.5 sm:py-2 px-2 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer truncate ${
               activeTab === "transit" && transitMode === "metro"
                 ? "bg-[#9333EA] text-white shadow-md shadow-purple-600/25"
                 : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
             }`}
           >
-            <Train size={14} />
-            <span>Metro</span>
+            <Train size={13} className="shrink-0" />
+            <span className="truncate">Metro</span>
             <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse shrink-0" />
           </button>
 
           {/* Tab 3: Decision Engine */}
           <button
             type="button"
-            onClick={() => setActiveTab("decision")}
-            className={`py-1.5 sm:py-2 px-2.5 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            onClick={() => {
+              setActiveTab("decision");
+              if (isCollapsed) setIsCollapsed(false);
+            }}
+            className={`py-1.5 sm:py-2 px-2.5 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer shrink-0 ${
               activeTab === "decision"
                 ? "bg-[#4F46E5] text-white shadow-md shadow-indigo/25"
                 : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
             }`}
             title="Decision Engine"
           >
-            <Cpu size={14} />
+            <Cpu size={13} />
             <span className="hidden sm:inline">Engine</span>
           </button>
         </div>
 
-        {/* Mobile / Mini Collapse toggle */}
+        {/* Universal Collapse / Expand / Map Toggle Button */}
         <button
           type="button"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="lg:hidden p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white"
-          title={isCollapsed ? "Expand panel" : "Collapse panel"}
+          className={`py-1.5 px-2.5 rounded-2xl text-xs font-extrabold flex items-center gap-1 cursor-pointer transition-all border shrink-0 shadow-2xs ${
+            isCollapsed
+              ? "bg-[#4F46E5] text-white border-indigo/80 hover:bg-indigo/90"
+              : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700"
+          }`}
+          title={isCollapsed ? "Open Transit Details" : "Close panel to view map"}
         >
-          {isCollapsed ? <ChevronRight size={16} /> : <X size={16} />}
+          {isCollapsed ? (
+            <>
+              <ChevronDown size={14} />
+              <span className="text-[11px] font-black">Open</span>
+            </>
+          ) : (
+            <>
+              <Map size={13} className="text-[#4F46E5] dark:text-indigo-400" />
+              <span className="text-[11px] font-black text-[#4F46E5] dark:text-indigo-400 hidden xs:inline">Map</span>
+              <ChevronUp size={13} />
+            </>
+          )}
         </button>
       </div>
+
+      {/* When Collapsed: Compact floating summary bar */}
+      {isCollapsed && (
+        hasActiveRoute ? (
+          <div className="p-2.5 sm:p-3 bg-gradient-to-r from-slate-50 via-white to-indigo/5 dark:from-slate-900 dark:via-slate-900/90 dark:to-indigo/15 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+            <div 
+              onClick={() => setIsCollapsed(false)}
+              className="flex items-center gap-2 min-w-0 cursor-pointer flex-1"
+            >
+              <span
+                className="text-white font-black px-2 py-0.5 rounded-lg text-xs shadow-2xs flex items-center gap-1 shrink-0"
+                style={{
+                  backgroundColor: isMetroRoute(currentRouteNo)
+                    ? (METRO_LINES_DATA.find(m => m.name.toLowerCase() === currentRouteNo.toLowerCase() || currentRouteNo.toLowerCase().includes(m.ref.toLowerCase()))?.color || "#9333EA")
+                    : "#4F46E5",
+                }}
+              >
+                {isMetroRoute(currentRouteNo) ? <Train size={12} /> : <Bus size={12} />}
+                <span>{currentRouteNo}</span>
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">
+                  {routeService?.name || (isMetroRoute(currentRouteNo) ? `Namma Metro ${currentRouteNo}` : `${currentRouteNo} Transit Corridor`)}
+                </p>
+                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Map Active • {displayedStops.length} {isMetroRoute(currentRouteNo) ? "Stations" : "Stops"}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsCollapsed(false)}
+                className="py-1 px-2.5 rounded-xl bg-[#4F46E5] hover:bg-indigo/90 text-white text-xs font-black flex items-center gap-1 shadow-sm cursor-pointer transition-all active:scale-95"
+              >
+                <ChevronDown size={14} />
+                <span>Details</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleClearActiveRoute}
+                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
+                title="Clear Route"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div 
+            onClick={() => setIsCollapsed(false)}
+            className="p-2.5 text-center text-xs text-slate-500 dark:text-slate-400 font-bold cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 transition-colors flex items-center justify-center gap-2"
+          >
+            <Search size={13} className="text-[#4F46E5]" />
+            <span>Search BMTC routes & Metro lines...</span>
+            <ChevronDown size={13} />
+          </div>
+        )
+      )}
 
       {!isCollapsed && (
         <>
@@ -1249,6 +1342,17 @@ export function BmtcLiveTransitPanel({
                     </p>
                   </div>
 
+                  {/* One-Tap View Map / Minimize Action */}
+                  <button
+                    type="button"
+                    onClick={() => setIsCollapsed(true)}
+                    className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-indigo/10 to-indigo/5 hover:from-indigo/20 hover:to-indigo/15 border border-indigo/25 text-[#4F46E5] dark:text-indigo-400 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-98 shadow-2xs"
+                  >
+                    <Map size={14} />
+                    <span>Hide Panel & View Map</span>
+                    <ChevronUp size={14} />
+                  </button>
+
                   {/* ========================================================
                       STARTING TO ENDING TRAVELPATH SELECTOR
                      ======================================================== */}
@@ -1528,6 +1632,17 @@ export function BmtcLiveTransitPanel({
                         );
                       })}
                     </div>
+
+                    {/* Bottom Map View Action */}
+                    <button
+                      type="button"
+                      onClick={() => setIsCollapsed(true)}
+                      className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                    >
+                      <Map size={13} className="text-[#4F46E5] dark:text-indigo-400" />
+                      <span>Close Panel to View Full Map</span>
+                      <ChevronUp size={13} />
+                    </button>
                   </div>
                 )}
 
