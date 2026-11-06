@@ -43,6 +43,8 @@ import {
   searchRoutesPlaceToPlace,
   loadAllStops,
   loadAllMetroStations,
+  loadMetroNetwork,
+  getMetroStationsForLine,
   isMetroRoute,
   METRO_LINES_DATA,
   findNearestStop,
@@ -262,7 +264,6 @@ export function BmtcLiveTransitPanel({
 
   // Autocomplete for From
   const handleFromChange = (val: string) => {
-    setHasManuallyEditedFrom(true);
     setFromPlace(val);
     if (!val.trim()) {
       setFromSuggestions([]);
@@ -346,9 +347,9 @@ export function BmtcLiveTransitPanel({
         const tLower = t.toLowerCase();
 
         for (const m of METRO_LINES_DATA) {
-          const mStations = await getMetroStationsForLine(m.ref);
-          const hasFrom = mStations.some((s) => s.name.toLowerCase().includes(fLower) || fLower.includes(s.name.toLowerCase().split(" ")[0]));
-          const hasTo = mStations.some((s) => s.name.toLowerCase().includes(tLower) || tLower.includes(s.name.toLowerCase().split(" ")[0]));
+          const mStations: BusStopItem[] = await getMetroStationsForLine(m.ref);
+          const hasFrom = mStations.some((s: BusStopItem) => s.name.toLowerCase().includes(fLower) || fLower.includes(s.name.toLowerCase().split(" ")[0]));
+          const hasTo = mStations.some((s: BusStopItem) => s.name.toLowerCase().includes(tLower) || tLower.includes(s.name.toLowerCase().split(" ")[0]));
 
           if (hasFrom || hasTo) {
             const lineName = `${m.ref} Line`;
