@@ -59,6 +59,26 @@ export interface JourneyLeg {
   dataSource: DataConfidence;
 }
 
+export interface DelayInfo {
+  isDelayed: boolean;
+  delayMinutes: number;
+  reason?: string;
+  originalTime?: string;
+  revisedTime?: string;
+}
+
+export interface CorridorBusArrival {
+  routeNo: string;
+  destination: string;
+  etaMinutes: number;
+  scheduledTime: string;
+  status: "on_time" | "delayed";
+  delayMinutes?: number;
+  delayReason?: string;
+  seatStatus: "Seats Free" | "Few Seats" | "Standing Only";
+  isRealtime: boolean;
+}
+
 export interface JourneyRecommendation {
   id: string;
   title: string;
@@ -74,6 +94,8 @@ export interface JourneyRecommendation {
   co2SavedKg: number;
   departureTime: string;
   arrivalTime: string;
+  nextDepartureMinutes?: number;
+  delayInfo?: DelayInfo;
   legs: JourneyLeg[];
   transportSummary: {
     modes: LegType[];
@@ -87,6 +109,7 @@ export interface JourneyRecommendation {
   seatProbability: "Likely" | "Possible" | "Unlikely" | "Unknown";
   isRealtimeTracked: boolean;
   score: number;
+  corridorBuses?: string[]; // Active BMTC bus numbers travelling this corridor
 }
 
 export interface JourneyPlanRequest {

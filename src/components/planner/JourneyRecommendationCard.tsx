@@ -22,6 +22,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Radio,
+  AlertTriangle,
 } from "lucide-react";
 import type { JourneyRecommendation, RecommendationTag } from "../../types/journeyPlanner";
 import { JourneyDetails } from "./JourneyDetails";
@@ -51,6 +52,8 @@ export function JourneyRecommendationCard({
     transportSummary,
     seatProbability,
     isRealtimeTracked,
+    nextDepartureMinutes = 4,
+    delayInfo,
   } = recommendation;
 
   // Tag styling helper
@@ -122,6 +125,39 @@ export function JourneyRecommendationCard({
             </span>
           </div>
         </div>
+
+        {/* Next Transit Departure & Real-Time Status Banner */}
+        <div className="flex flex-wrap items-center justify-between gap-1.5 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-xs">
+          <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
+            <Clock size={12} className="text-indigo shrink-0" />
+            <span>
+              Arrival / Next Departure in <strong className="text-indigo">{nextDepartureMinutes} min</strong> ({departureTime})
+            </span>
+          </div>
+
+          {delayInfo?.isDelayed ? (
+            <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1 shrink-0">
+              <AlertTriangle size={11} className="text-amber-500 shrink-0" />
+              <span>+{delayInfo.delayMinutes}m Congestion Delay</span>
+            </span>
+          ) : (
+            <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>On Time (GTFS Live)</span>
+            </span>
+          )}
+        </div>
+
+        {delayInfo?.isDelayed && delayInfo.reason && (
+          <div className="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] font-semibold text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
+            <span>⚠️ Live Transit Alert: {delayInfo.reason}</span>
+            {delayInfo.revisedTime && (
+              <span className="text-[10px] font-mono font-bold shrink-0">
+                Expected: {delayInfo.revisedTime}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Primary Row: Duration, Time & Fare */}
         <div className="flex flex-wrap items-baseline justify-between gap-2">

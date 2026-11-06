@@ -567,6 +567,11 @@ function PlanPage() {
             error={planError}
             from={fromPlace}
             to={toPlace}
+            onSelectRoutePill={(rNo) => {
+              setBusInput(rNo);
+              setActiveTab("route");
+              handleLoadRoute(rNo);
+            }}
           />
         </div>
       )}

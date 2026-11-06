@@ -12,7 +12,7 @@
  * - Decision Engine mode with congestion intelligence and seat probability
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Bus,
   Train,
@@ -54,6 +54,7 @@ import {
   type UpcomingBusArrival,
   type MetroLineSummary,
 } from "../../lib/transitService";
+import { matchMetroStationByName } from "../../lib/metroRouting";
 
 const ROUTE_PILLS = [
   "500-D",
@@ -139,6 +140,10 @@ export function BmtcLiveTransitPanel({
   const [upcomingBuses, setUpcomingBuses] = useState<UpcomingBusArrival[]>([]);
   const [showSubwayDiagram, setShowSubwayDiagram] = useState(false);
 
+  // User's customized travel path on this route (Starting stop -> Ending stop)
+  const [travelFromStopId, setTravelFromStopId] = useState<string>("");
+  const [travelToStopId, setTravelToStopId] = useState<string>("");
+
   // Live timestamp
   const [lastUpdatedTime, setLastUpdatedTime] = useState<string>("");
 
@@ -148,6 +153,23 @@ export function BmtcLiveTransitPanel({
   // Suggestions for route search
   const [suggestions, setSuggestions] = useState<RouteServiceItem[]>([]);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const fromDropdownRef = useRef<HTMLDivElement>(null);
+  const toDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close place suggestions dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (fromDropdownRef.current && !fromDropdownRef.current.contains(target)) {
+        setShowFromDropdown(false);
+      }
+      if (toDropdownRef.current && !toDropdownRef.current.contains(target)) {
+        setShowToDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Sync with external transit mode (e.g. from bottom bar)
   useEffect(() => {
@@ -258,6 +280,8 @@ export function BmtcLiveTransitPanel({
     setActiveStop(null);
     setUpcomingBuses([]);
     setShowSubwayDiagram(false);
+    setTravelFromStopId("");
+    setTravelToStopId("");
     setPlaceError(null);
     onClearRoute?.();
   };
@@ -267,13 +291,14 @@ export function BmtcLiveTransitPanel({
     setFromPlace(val);
     if (!val.trim()) {
       setFromSuggestions([]);
+      setShowFromDropdown(false);
       return;
     }
     const lower = val.toLowerCase();
     const sourceList = transitMode === "metro" ? allMetroStationsList : allStopsList;
     const filtered = sourceList
       .filter((s) => s.name.toLowerCase().includes(lower))
-      .slice(0, 5);
+      .slice(0, 8);
     setFromSuggestions(filtered);
     setShowFromDropdown(true);
   };
@@ -283,13 +308,14 @@ export function BmtcLiveTransitPanel({
     setToPlace(val);
     if (!val.trim()) {
       setToSuggestions([]);
+      setShowToDropdown(false);
       return;
     }
     const lower = val.toLowerCase();
     const sourceList = transitMode === "metro" ? allMetroStationsList : allStopsList;
     const filtered = sourceList
       .filter((s) => s.name.toLowerCase().includes(lower))
-      .slice(0, 5);
+      .slice(0, 8);
     setToSuggestions(filtered);
     setShowToDropdown(true);
   };
@@ -338,27 +364,72 @@ export function BmtcLiveTransitPanel({
     const t = (overrideTo !== undefined ? overrideTo : toPlace).trim();
     if (!f && !t) return;
 
+    setShowFromDropdown(false);
+    setShowToDropdown(false);
     setIsSearchingPlaces(true);
     setPlaceError(null);
     try {
       if (transitMode === "metro") {
-        const { lines, stations } = await loadMetroNetwork();
-        const fLower = f.toLowerCase();
-        const tLower = t.toLowerCase();
+        const fromSt = await matchMetroStationByName(f);
+        const toSt = await matchMetroStationByName(t);
 
-        for (const m of METRO_LINES_DATA) {
-          const mStations: BusStopItem[] = await getMetroStationsForLine(m.ref);
-          const hasFrom = mStations.some((s: BusStopItem) => s.name.toLowerCase().includes(fLower) || fLower.includes(s.name.toLowerCase().split(" ")[0]));
-          const hasTo = mStations.some((s: BusStopItem) => s.name.toLowerCase().includes(tLower) || tLower.includes(s.name.toLowerCase().split(" ")[0]));
+        if (!fromSt && !toSt) {
+          setPlaceError(
+            `Neither "${f}" nor "${t}" are recognized Namma Metro stations. Please select valid stations or switch to BMTC for direct bus routes.`
+          );
+          setIsSearchingPlaces(false);
+          return;
+        }
 
-          if (hasFrom || hasTo) {
-            const lineName = `${m.ref} Line`;
+        if (fromSt && toSt) {
+          // Check common line
+          const commonLine = fromSt.lines.find((l) => toSt.lines.includes(l));
+          if (commonLine) {
+            const lineName = `${commonLine} Line`;
             setCurrentRouteNo(lineName);
             setSearchQuery(lineName);
             await loadRoute(lineName);
-            onSelectPlaceToPlace?.(f, t, lineName);
+            setTravelFromStopId(fromSt.id);
+            setTravelToStopId(toSt.id);
+            onSelectPlaceToPlace?.(fromSt.name, toSt.name, lineName);
+            return;
+          } else {
+            // Interchange required (Purple <-> Green via Majestic, Green <-> Yellow via RV Road)
+            const originLine = fromSt.lines[0];
+            const destLine = toSt.lines[0];
+            const interchangeName =
+              (originLine === "Green" && destLine === "Yellow") ||
+              (originLine === "Yellow" && destLine === "Green")
+                ? "Rashtreeya Vidyalaya Road"
+                : "Nadaprabhu Kempegowda Station, Majestic";
+
+            const lineName = `${originLine} Line`;
+            setCurrentRouteNo(lineName);
+            setSearchQuery(lineName);
+            await loadRoute(lineName);
+            setTravelFromStopId(fromSt.id);
+            onSelectPlaceToPlace?.(fromSt.name, toSt.name, lineName);
+            setPlaceError(
+              `Interchange Route: Board ${originLine} Line at ${fromSt.name}, change trains at ${interchangeName} to ${destLine} Line towards ${toSt.name}.`
+            );
             return;
           }
+        }
+
+        // Only one place is a metro station
+        if (!fromSt) {
+          setPlaceError(
+            `"${f}" is not a Namma Metro station. Try searching in BMTC mode or select the nearest Metro station.`
+          );
+          setIsSearchingPlaces(false);
+          return;
+        }
+        if (!toSt) {
+          setPlaceError(
+            `"${t}" is not a Namma Metro station. Try searching in BMTC mode or select the nearest Metro station.`
+          );
+          setIsSearchingPlaces(false);
+          return;
         }
       }
 
@@ -438,14 +509,130 @@ export function BmtcLiveTransitPanel({
     }
   };
 
+  // Travel Path computations (Starting Stop -> Ending Stop on active route)
+  const travelFromStop = routeStops.find((s) => s.id === travelFromStopId) || null;
+  const travelToStop = routeStops.find((s) => s.id === travelToStopId) || null;
+
+  const travelPathSegment = useMemo(() => {
+    if (!travelFromStop || !travelToStop) return null;
+    const fromIdx = routeStops.findIndex((s) => s.id === travelFromStop.id);
+    const toIdx = routeStops.findIndex((s) => s.id === travelToStop.id);
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return null;
+
+    const startIdx = Math.min(fromIdx, toIdx);
+    const endIdx = Math.max(fromIdx, toIdx);
+    const intermediateCount = endIdx - startIdx;
+    const estMin = Math.max(4, Math.round(intermediateCount * 2.2 + 2));
+    const fare = intermediateCount <= 5 ? 15 : intermediateCount <= 12 ? 20 : 25;
+
+    return {
+      fromIdx,
+      toIdx,
+      startIdx,
+      endIdx,
+      stopsCount: intermediateCount,
+      estMinutes: estMin,
+      fare,
+      isForward: fromIdx < toIdx,
+      stopIdsSet: new Set(routeStops.slice(startIdx, endIdx + 1).map((s) => s.id)),
+    };
+  }, [travelFromStop, travelToStop, routeStops]);
+
+  const handleSetStartingStop = (stop: BusStopItem | null) => {
+    const nextFromId = stop ? stop.id : "";
+    setTravelFromStopId(nextFromId);
+
+    // If destination stop is not yet set, default to terminus
+    let nextTo = travelToStop;
+    if (stop && !travelToStop && routeStops.length > 0) {
+      const lastStop = routeStops[routeStops.length - 1];
+      if (lastStop.id !== stop.id) {
+        nextTo = lastStop;
+        setTravelToStopId(lastStop.id);
+      }
+    }
+
+    if (stop && nextTo && onSelectPlaceToPlace) {
+      onSelectPlaceToPlace(stop.name, nextTo.name, currentRouteNo);
+    } else if (!stop && !nextTo && onSelectPlaceToPlace) {
+      onSelectPlaceToPlace("", "", currentRouteNo);
+    }
+  };
+
+  const handleSetEndingStop = (stop: BusStopItem | null) => {
+    const nextToId = stop ? stop.id : "";
+    setTravelToStopId(nextToId);
+
+    // If starting stop is not yet set, default to route origin
+    let nextFrom = travelFromStop;
+    if (stop && !travelFromStop && routeStops.length > 0) {
+      const firstStop = routeStops[0];
+      if (firstStop.id !== stop.id) {
+        nextFrom = firstStop;
+        setTravelFromStopId(firstStop.id);
+      }
+    }
+
+    if (nextFrom && stop && onSelectPlaceToPlace) {
+      onSelectPlaceToPlace(nextFrom.name, stop.name, currentRouteNo);
+    } else if (!nextFrom && !stop && onSelectPlaceToPlace) {
+      onSelectPlaceToPlace("", "", currentRouteNo);
+    }
+  };
+
+  const handleSwapTravelPath = () => {
+    const tempFrom = travelFromStop;
+    const tempTo = travelToStop;
+    setTravelFromStopId(tempTo ? tempTo.id : "");
+    setTravelToStopId(tempFrom ? tempFrom.id : "");
+    if (tempTo && tempFrom && onSelectPlaceToPlace) {
+      onSelectPlaceToPlace(tempTo.name, tempFrom.name, currentRouteNo);
+    }
+  };
+
+  const handleClearTravelPath = () => {
+    setTravelFromStopId("");
+    setTravelToStopId("");
+    if (onSelectPlaceToPlace) {
+      onSelectPlaceToPlace("", "", currentRouteNo);
+    }
+  };
+
+  const handleSetNearestStartStop = () => {
+    if (!navigator.geolocation || routeStops.length === 0) return;
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        let closest = routeStops[0];
+        let minDist = Infinity;
+        for (const st of routeStops) {
+          const d = Math.hypot(st.lat - latitude, st.lng - longitude);
+          if (d < minDist) {
+            minDist = d;
+            closest = st;
+          }
+        }
+        setIsLocating(false);
+        if (closest) {
+          handleSetStartingStop(closest);
+        }
+      },
+      () => {
+        setIsLocating(false);
+      },
+      { timeout: 8000 }
+    );
+  };
+
   const displayedStops = routeStops;
 
   return (
     <div
-      className={`bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col transition-all duration-300 pointer-events-auto ${
+      className={`bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xl flex flex-col transition-all duration-300 pointer-events-auto ${
         isCollapsed || !hasActiveRoute
-          ? "h-auto"
-          : "h-[calc(100vh-6.5rem)] max-h-[820px]"
+          ? "h-auto overflow-visible"
+          : "h-[calc(100vh-6.5rem)] max-h-[820px] overflow-hidden"
       } ${className}`}
     >
       {/* ========================================================
@@ -590,6 +777,9 @@ export function BmtcLiveTransitPanel({
                             type="text"
                             value={fromPlace}
                             onChange={(e) => handleFromChange(e.target.value)}
+                            onFocus={() => {
+                              if (fromPlace.trim() && fromSuggestions.length > 0) setShowFromDropdown(true);
+                            }}
                             placeholder={transitMode === "metro" ? "Starting metro station..." : "Starting stop or location..."}
                             className="w-full bg-transparent text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
                           />
@@ -598,19 +788,32 @@ export function BmtcLiveTransitPanel({
 
                       {/* From Dropdown */}
                       {showFromDropdown && fromSuggestions.length > 0 && (
-                        <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
+                        <div
+                          ref={fromDropdownRef}
+                          className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl z-[100] max-h-56 sm:max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80 scrollbar-thin animate-in fade-in slide-in-from-top-1 duration-150"
+                        >
                           {fromSuggestions.map((s) => (
                             <button
-                              key={s.id}
+                              key={`from-${s.id}`}
                               type="button"
                               onClick={() => {
                                 setFromPlace(s.name);
                                 setShowFromDropdown(false);
                               }}
-                              className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium cursor-pointer"
+                              className="w-full text-left px-3.5 py-2.5 text-xs hover:bg-indigo-50/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium cursor-pointer flex items-center justify-between transition-colors"
                             >
-                              <span className="font-bold">{s.name}</span>
-                              {s.desc && <span className="text-[10px] text-slate-400 block">{s.desc}</span>}
+                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 text-[10px]">
+                                  {s.id?.startsWith("station") || transitMode === "metro" ? "🚇" : "🚏"}
+                                </div>
+                                <div className="truncate">
+                                  <span className="font-bold text-slate-900 dark:text-white block truncate">{s.name}</span>
+                                  {s.desc && <span className="text-[10px] text-slate-400 block truncate">{s.desc}</span>}
+                                </div>
+                              </div>
+                              <span className="text-[9px] font-bold text-indigo dark:text-indigo-400 bg-indigo/10 dark:bg-indigo/20 px-2 py-0.5 rounded-md shrink-0">
+                                Select
+                              </span>
                             </button>
                           ))}
                         </div>
@@ -641,6 +844,9 @@ export function BmtcLiveTransitPanel({
                             type="text"
                             value={toPlace}
                             onChange={(e) => handleToChange(e.target.value)}
+                            onFocus={() => {
+                              if (toPlace.trim() && toSuggestions.length > 0) setShowToDropdown(true);
+                            }}
                             placeholder={transitMode === "metro" ? "Destination metro station..." : "Destination stop or location..."}
                             className="w-full bg-transparent text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
                           />
@@ -649,19 +855,32 @@ export function BmtcLiveTransitPanel({
 
                       {/* To Dropdown */}
                       {showToDropdown && toSuggestions.length > 0 && (
-                        <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
+                        <div
+                          ref={toDropdownRef}
+                          className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl z-[100] max-h-56 sm:max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80 scrollbar-thin animate-in fade-in slide-in-from-top-1 duration-150"
+                        >
                           {toSuggestions.map((s) => (
                             <button
-                              key={s.id}
+                              key={`to-${s.id}`}
                               type="button"
                               onClick={() => {
                                 setToPlace(s.name);
                                 setShowToDropdown(false);
                               }}
-                              className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium cursor-pointer"
+                              className="w-full text-left px-3.5 py-2.5 text-xs hover:bg-indigo-50/60 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium cursor-pointer flex items-center justify-between transition-colors"
                             >
-                              <span className="font-bold">{s.name}</span>
-                              {s.desc && <span className="text-[10px] text-slate-400 block">{s.desc}</span>}
+                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                <div className="w-5 h-5 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 text-[10px]">
+                                  {s.id?.startsWith("station") || transitMode === "metro" ? "🚇" : "📍"}
+                                </div>
+                                <div className="truncate">
+                                  <span className="font-bold text-slate-900 dark:text-white block truncate">{s.name}</span>
+                                  {s.desc && <span className="text-[10px] text-slate-400 block truncate">{s.desc}</span>}
+                                </div>
+                              </div>
+                              <span className="text-[9px] font-bold text-indigo dark:text-indigo-400 bg-indigo/10 dark:bg-indigo/20 px-2 py-0.5 rounded-md shrink-0">
+                                Select
+                              </span>
                             </button>
                           ))}
                         </div>
@@ -808,6 +1027,25 @@ export function BmtcLiveTransitPanel({
                       <RefreshCw size={13} className={isLoading ? "animate-spin text-indigo" : ""} />
                     </button>
                   </form>
+
+                  {/* Typeahead Suggestions when switching routes */}
+                  {suggestions.length > 0 && searchQuery.trim() && (
+                    <div className="mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 max-h-48 overflow-y-auto">
+                      {suggestions.map((s) => (
+                        <button
+                          key={s.routeNo}
+                          type="button"
+                          onClick={() => handleRoutePillClick(s.routeNo)}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between cursor-pointer"
+                        >
+                          <span className="font-bold text-indigo">{s.routeNo}</span>
+                          <span className="truncate text-slate-600 dark:text-slate-300 text-[11px] ml-2 font-medium">
+                            {s.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Horizontal Route Pills */}
@@ -923,6 +1161,127 @@ export function BmtcLiveTransitPanel({
                     </p>
                   </div>
 
+                  {/* ========================================================
+                      STARTING TO ENDING TRAVELPATH SELECTOR
+                     ======================================================== */}
+                  <div className="bg-white dark:bg-slate-900/90 rounded-2xl p-3 border border-indigo/20 dark:border-indigo/40 shadow-xs space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-indigo dark:text-indigo-400 flex items-center gap-1.5">
+                        <Navigation size={12} />
+                        <span>Select My Travel Path</span>
+                      </span>
+
+                      {travelPathSegment && (
+                        <button
+                          type="button"
+                          onClick={handleClearTravelPath}
+                          className="text-[10px] font-bold text-rose-500 hover:text-rose-600 dark:hover:text-rose-400 flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <X size={11} />
+                          <span>Show Full Route</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Selectors: Starting Stop & Destination Stop */}
+                    <div className="space-y-1.5">
+                      {/* Starting Stop */}
+                      <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 rounded-xl px-2.5 py-1.5 border border-slate-200/80 dark:border-slate-700/80 focus-within:border-emerald-500">
+                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <label className="text-[9px] uppercase font-black text-slate-400 block leading-none">
+                            Starting Stop (Boarding)
+                          </label>
+                          <select
+                            value={travelFromStopId}
+                            onChange={(e) => {
+                              const found = routeStops.find((s) => s.id === e.target.value) || null;
+                              handleSetStartingStop(found);
+                            }}
+                            className="w-full bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer truncate py-0.5"
+                          >
+                            <option value="" className="text-slate-400 dark:bg-slate-900">
+                              Select starting stop...
+                            </option>
+                            {routeStops.map((st, idx) => (
+                              <option key={st.id} value={st.id} className="dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+                                {idx + 1}. {st.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleSetNearestStartStop}
+                          className="p-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold flex items-center gap-0.5 shrink-0 transition-colors cursor-pointer"
+                          title="Set to nearest stop using GPS"
+                        >
+                          <Crosshair size={11} />
+                          <span className="hidden sm:inline">GPS</span>
+                        </button>
+                      </div>
+
+                      {/* Ending Stop */}
+                      <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 rounded-xl px-2.5 py-1.5 border border-slate-200/80 dark:border-slate-700/80 focus-within:border-rose-500">
+                        <div className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <label className="text-[9px] uppercase font-black text-slate-400 block leading-none">
+                            Ending Stop (Destination)
+                          </label>
+                          <select
+                            value={travelToStopId}
+                            onChange={(e) => {
+                              const found = routeStops.find((s) => s.id === e.target.value) || null;
+                              handleSetEndingStop(found);
+                            }}
+                            className="w-full bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer truncate py-0.5"
+                          >
+                            <option value="" className="text-slate-400 dark:bg-slate-900">
+                              Select ending destination...
+                            </option>
+                            {routeStops.map((st, idx) => (
+                              <option key={st.id} value={st.id} className="dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+                                {idx + 1}. {st.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {travelFromStopId && travelToStopId && (
+                          <button
+                            type="button"
+                            onClick={handleSwapTravelPath}
+                            className="p-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-600 dark:text-slate-300 shrink-0 transition-transform active:scale-95 cursor-pointer"
+                            title="Swap starting & destination stops"
+                          >
+                            <ArrowRightLeft size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Active Travel Path Stats */}
+                    {travelPathSegment && (
+                      <div className="p-2 bg-gradient-to-r from-emerald-500/10 via-indigo/10 to-rose-500/10 rounded-xl border border-indigo/20 flex flex-wrap items-center justify-between gap-1.5 text-xs animate-in fade-in duration-150">
+                        <div className="flex items-center gap-1.5 font-black text-slate-800 dark:text-slate-100 text-[11px]">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          <span>Travelpath Active on Map</span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 font-bold text-[10px] text-slate-600 dark:text-slate-300">
+                          <span className="bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded shadow-2xs border border-slate-200/60 dark:border-slate-700">
+                            {travelPathSegment.stopsCount} stops
+                          </span>
+                          <span className="bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded shadow-2xs border border-slate-200/60 dark:border-slate-700">
+                            ~{travelPathSegment.estMinutes} min
+                          </span>
+                          <span className="bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 font-black">
+                            ₹{travelPathSegment.fare}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Live Feed Ticker */}
                   <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/40 text-[10px]">
                     <div className="flex items-center gap-1 text-indigo font-bold">
@@ -983,47 +1342,101 @@ export function BmtcLiveTransitPanel({
                     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800/80 max-h-56 overflow-y-auto">
                       {displayedStops.map((stop, idx) => {
                         const isSelected = activeStop?.id === stop.id;
-                        const destinationName =
-                          displayedStops[displayedStops.length - 1]?.name || "Terminus";
+                        const isTravelStart = travelFromStopId === stop.id;
+                        const isTravelEnd = travelToStopId === stop.id;
+                        const isOnTravelPath = travelPathSegment?.stopIdsSet.has(stop.id);
 
                         return (
-                          <button
+                          <div
                             key={`${stop.id}-${idx}`}
-                            type="button"
                             onClick={() => handleStopClick(stop)}
-                            className={`w-full text-left p-2.5 transition-colors flex items-start gap-2.5 cursor-pointer ${
-                              isSelected
+                            className={`w-full text-left p-2.5 transition-colors flex items-center justify-between gap-2 cursor-pointer ${
+                              isTravelStart
+                                ? "bg-emerald-500/10 dark:bg-emerald-950/40 border-l-4 border-emerald-500"
+                                : isTravelEnd
+                                ? "bg-rose-500/10 dark:bg-rose-950/40 border-l-4 border-rose-500"
+                                : isOnTravelPath
+                                ? "bg-indigo/5 dark:bg-indigo-950/30 border-l-4 border-indigo/60"
+                                : isSelected
                                 ? "bg-indigo/10 dark:bg-indigo/20 text-indigo font-bold"
                                 : "hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-200"
                             }`}
                           >
-                            <div className="flex flex-col items-center shrink-0 mt-0.5">
-                              <div
-                                className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black ${
-                                  idx === 0
-                                    ? "bg-emerald-600 text-white"
-                                    : idx === displayedStops.length - 1
-                                    ? "bg-rose-600 text-white"
-                                    : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
-                                }`}
-                              >
-                                {idx + 1}
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="flex flex-col items-center shrink-0">
+                                <div
+                                  className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black ${
+                                    isTravelStart
+                                      ? "bg-emerald-600 text-white ring-2 ring-emerald-500/40"
+                                      : isTravelEnd
+                                      ? "bg-rose-600 text-white ring-2 ring-rose-500/40"
+                                      : isOnTravelPath
+                                      ? "bg-indigo text-white"
+                                      : idx === 0
+                                      ? "bg-emerald-600 text-white"
+                                      : idx === displayedStops.length - 1
+                                      ? "bg-rose-600 text-white"
+                                      : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                                  }`}
+                                >
+                                  {idx + 1}
+                                </div>
+                              </div>
+
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold truncate flex items-center gap-1.5">
+                                  <span>{stop.name}</span>
+                                  {isTravelStart && (
+                                    <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded font-black shrink-0">
+                                      Boarding
+                                    </span>
+                                  )}
+                                  {isTravelEnd && (
+                                    <span className="text-[9px] bg-rose-600 text-white px-1.5 py-0.2 rounded font-black shrink-0">
+                                      Destination
+                                    </span>
+                                  )}
+                                </div>
+                                {stop.desc && (
+                                  <div className="text-[10px] text-slate-400 truncate">{stop.desc}</div>
+                                )}
                               </div>
                             </div>
 
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs font-bold truncate">{stop.name}</div>
-                              {stop.desc && (
-                                <div className="text-[10px] text-slate-400 truncate">{stop.desc}</div>
-                              )}
+                            {/* Quick Action Buttons for Start & End */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSetStartingStop(stop);
+                                }}
+                                className={`text-[9px] px-2 py-0.5 rounded-lg font-black transition-all cursor-pointer ${
+                                  isTravelStart
+                                    ? "bg-emerald-600 text-white shadow-2xs"
+                                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+                                }`}
+                                title="Set as starting boarding stop"
+                              >
+                                Start
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSetEndingStop(stop);
+                                }}
+                                className={`text-[9px] px-2 py-0.5 rounded-lg font-black transition-all cursor-pointer ${
+                                  isTravelEnd
+                                    ? "bg-rose-600 text-white shadow-2xs"
+                                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                                }`}
+                                title="Set as ending destination stop"
+                              >
+                                End
+                              </button>
                             </div>
-
-                            {isSelected && (
-                              <span className="text-[10px] bg-[#4F46E5] text-white px-1.5 py-0.5 rounded font-black shrink-0">
-                                Selected
-                              </span>
-                            )}
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -1105,6 +1518,34 @@ export function BmtcLiveTransitPanel({
                           </div>
                         </div>
                       ))}
+                    </div>
+
+                    {/* Travel Path Quick Actions for this Stop */}
+                    <div className="flex items-center gap-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => handleSetStartingStop(activeStop)}
+                        className={`flex-1 py-1.5 px-2 rounded-xl text-[10px] font-black border flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                          travelFromStopId === activeStop.id
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
+                            : "bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                        }`}
+                      >
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span>{travelFromStopId === activeStop.id ? "✓ Boarding Stop" : "Board Here (Start)"}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSetEndingStop(activeStop)}
+                        className={`flex-1 py-1.5 px-2 rounded-xl text-[10px] font-black border flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                          travelToStopId === activeStop.id
+                            ? "bg-rose-600 text-white border-rose-600 shadow-2xs"
+                            : "bg-rose-500/15 hover:bg-rose-500/25 text-rose-700 dark:text-rose-400 border-rose-500/30"
+                        }`}
+                      >
+                        <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                        <span>{travelToStopId === activeStop.id ? "✓ Destination Stop" : "Get Off Here (End)"}</span>
+                      </button>
                     </div>
                   </div>
                 )}
